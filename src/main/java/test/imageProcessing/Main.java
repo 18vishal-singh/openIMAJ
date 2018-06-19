@@ -24,11 +24,13 @@ import org.openimaj.image.processing.face.detection.DetectedFace;
 import org.openimaj.image.processing.face.detection.FaceDetector;
 import org.openimaj.image.processing.face.detection.HaarCascadeDetector;
 import org.openimaj.image.processing.resize.ResizeProcessor;
+import org.openimaj.video.Video;
+import org.openimaj.video.xuggle.XuggleVideo;
 
 /**
- * Matching faces from an image from our stored dataset
+ * Matching Obama face from a given video
  * 
- * @author vishal singh
+ * @author Vishal Singh
  *
  */
 public class Main {
@@ -36,25 +38,27 @@ public class Main {
 	public static void main(String[] args) throws MalformedURLException, IOException {
 		final int nEigenvectors = 100;
 		final EigenImages eigen = new EigenImages(nEigenvectors);
+		// Setting our dataset which contains multiple pic of target person.
 		final VFSGroupDataset<FImage> dataset = new VFSGroupDataset<FImage>(
 				"C:\\Users\\599763\\Desktop\\code-hub\\imageProcessing\\data\\dataSet", ImageUtilities.FIMAGE_READER);
 
 		List<FImage> basisImages = new ArrayList<FImage>();
-		;
+
 		for (final Entry<String, VFSListDataset<FImage>> training : dataset.entrySet()) {
 			basisImages.addAll(training.getValue());
 		}
+		// Training the object with sample images of target person
 		eigen.train(basisImages);
-		final List<FImage> eigenFaces = new ArrayList<FImage>();
-		for (int i = 0; i < 19; i++) {
-			eigenFaces.add(eigen.visualisePC(i));
-		}
-		DisplayUtilities.display("EigenFaces", eigenFaces);
+		// final List<FImage> eigenFaces = new ArrayList<FImage>();
+		// for (int i = 0; i < 19; i++) {
+		// eigenFaces.add(eigen.visualisePC(i));
+		// }
+		// DisplayUtilities.display("EigenFaces", eigenFaces);
 
 		/*
 		 * Build a map of person->[features] for all the training data
 		 */
-		System.out.println("Checkpoint");
+		// System.out.println("---------Checkpoint-------");
 		final Map<String, DoubleFV[]> features = new HashMap<String, DoubleFV[]>();
 		for (final Entry<String, VFSListDataset<FImage>> person : dataset.entrySet()) {
 			final DoubleFV[] fvs = new DoubleFV[10];
@@ -64,40 +68,40 @@ public class Main {
 			}
 			features.put(person.getKey(), fvs);
 		}
-		System.out.println("total person-" + features.size());
-		
-		/*
-		 * Extracting faces from image and comparing
-		 */
-		MBFImage img = ImageUtilities.readMBF(new File("data/obamaf.jpg"));
-		FaceDetector<DetectedFace, FImage> fd = new HaarCascadeDetector(40);
-		List<DetectedFace> faces = fd.detectFaces(Transforms.calculateIntensity(img));
-		DetectedFace tempFace=null;
-		for (DetectedFace face : faces) {
-			FImage testFace = ResizeProcessor.resample(face.getFacePatch(), 87, 112);
-			final DoubleFV testFeature = eigen.extractFeature(testFace);
-			
-			String bestPerson = null;
-			double minDistance = Double.MAX_VALUE;
-			for (final String person : features.keySet()) {
-				System.out.println("THis is---------------------"+person);
-				for (final DoubleFV fv : features.get(person)) {
-					final double distance = fv.compare(testFeature, DoubleFVComparison.EUCLIDEAN);
+		System.out.println("total person in dataset -" + features.size());
 
-					if (distance < minDistance) {
-						minDistance = distance;
-						bestPerson = person;
+		// MBFImage img = ImageUtilities.readMBF(new File("data/obamaGroup.jpg"));
+		// Source video where we have to find the person.
+		Video<MBFImage> video = new XuggleVideo(new File("data/sample1.mkv"));
+		int ii = 1;
+		for (MBFImage img : video) {
+			FaceDetector<DetectedFace, FImage> fd = new HaarCascadeDetector(40);
+			List<DetectedFace> faces = fd.detectFaces(Transforms.calculateIntensity(img));
+			DetectedFace tempFace = null;
+			for (DetectedFace face : faces) {
+				FImage testFace = ResizeProcessor.resample(face.getFacePatch(), 110, 112);
+				final DoubleFV testFeature = eigen.extractFeature(testFace);
+
+				String bestPerson = null;
+				double minDistance = Double.MAX_VALUE;
+				for (final String person : features.keySet()) {
+					// System.out.println("THis is---------------------"+person);
+					for (final DoubleFV fv : features.get(person)) {
+						final double distance = fv.compare(testFeature, DoubleFVComparison.EUCLIDEAN);
+
+						if (distance < minDistance) {
+							minDistance = distance;
+							if (minDistance < 12.2)
+								bestPerson = person;
+						}
 					}
 				}
+				System.out.println((ii++) + "--" + "name: " + bestPerson + " & minDistance: " + minDistance);
+				if (bestPerson != null)
+					img.drawShape(face.getBounds(), RGBColour.RED);
 			}
-			System.out.println(minDistance);
-			System.out.println("guess: " + bestPerson);
-			
-			if(minDistance> 12)
-				img.drawShape(face.getBounds(), RGBColour.RED);
+			DisplayUtilities.displayName(img, "ObamaDetection");
 		}
-		DisplayUtilities.display(img);
 	}
-
 
 }
